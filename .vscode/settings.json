@@ -6,6 +6,11 @@
         "initializer_list": "cpp",
         "new": "cpp",
         "ostream": "cpp",
-        "iostream": "cpp"
+        "iostream": "cpp",
+        "cmath": "cpp",
+        "simd": "cpp",
+        "bitset": "cpp",
+        "random": "cpp",
+        "string": "cpp"
     }
 }
