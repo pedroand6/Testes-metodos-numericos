@@ -29,24 +29,33 @@ float Q_rsqrt( float number )
 }
 
 class LinearSystem{
+// Classe da matriz principal do sistema linear para gerenciamento e print dos dados
 public:
-    vector<float> *data;
-    int32_t size;
+    vector<float> *data; // Ponteiro dos dados da matriz
+    int32_t size; // Largura da matriz
 
-    vector<int> linePivot;
-    vector<int> columnPivot;
+    vector<int> linePivot; // Vector com os valores do índice referente a cada linha, ex: [3, 2, 1, 4] -> trocou linhas 1 e 3 no pivotamento
+    vector<int> columnPivot; // Vector com os valores do índice referente a cada coluna
 
     LinearSystem(vector<float> *thisData){
         data = thisData;
         size = sqrt(data->size());
-        linePivot = vector<int>(size, -1);
-        columnPivot = vector<int>(size, -1);
+        linePivot.resize(size);
+        columnPivot.resize(size);
+
+        // Inserindo índices padrão das linhas e colunas
+        for(int i = 0; i < size; ++i){
+            linePivot[i] = i;
+            columnPivot[i] = i;
+        }
     }
 
+    // Método para pegar valor dos dados com os índices da matriz
     float& at(int i, int j){
         return (*data)[i * size + j];
     }
 
+    // Output dos dados da matriz em formatação de tabela
     void printLinearSystem() {
         for (int i = 0; i < size; ++i) {
             for (int j = 0; j < size; ++j) {
@@ -57,6 +66,7 @@ public:
         cout << "--------------------" << endl;
     }
 
+    // Método para normalizar os vetores das linhas da matriz (usado na validação do sistema linear)
     void normalize(){
         for(int j = 0; j < size; j++){
             simd_vec sqr_sum_vec(0.0f);
@@ -68,8 +78,6 @@ public:
                 rowVec.copy_from(row_j_ptr, stdx::element_aligned);
 
                 sqr_sum_vec += rowVec * rowVec;
-
-                rowVec.copy_to(row_j_ptr, stdx::element_aligned);
             }
 
             float sqr_sum = stdx::reduce(sqr_sum_vec);
@@ -83,7 +91,6 @@ public:
                 return;
             }
             else if(sqr_sum == 1){
-                // Row already normalized, continue to next row
                 continue;
             }
 
@@ -107,32 +114,29 @@ public:
     }
 };
 
+// Função de pivotamento total da matrix principal
 float pivoting(LinearSystem &matrix, int index){
+    int n = matrix.size;
+    int maxPivotLine = index;
+    int maxPivotCol = index;
+    float maxAbs = abs(matrix.at(index, index));
 
-    float maxPivotLine = index;
-
-    // Itera em todas as linhas para ver o maior valor da coluna index
-    for(int i = index+1; i < matrix.size; ++i){
-        if(abs(matrix.at(i, index)) > abs(matrix.at(maxPivotLine, index))){
-            maxPivotLine = i;
+    // Itera em todas as linhas e colunas para ver qual o maior valor absoluto da 
+    // submatriz abaixo da linha e da coluna atual
+    for(int i = index; i < n; ++i){
+        // Itera em todas as colunas para ver o maior valor da linha index
+        for(int j = index; j < n; ++j){
+            float val = abs(matrix.at(i, j));
+            if(val > maxAbs){
+                maxAbs = val;
+                maxPivotLine = i;
+                maxPivotCol = j;
+            }
         }
     }
 
-    float maxPivotCol = index;
-
-    // Itera em todas as colunas para ver o maior valor da linha index
-    for(int j = index+1; j < matrix.size; ++j){
-        if(abs(matrix.at(index, j)) > abs(matrix.at(index, maxPivotCol))){
-            maxPivotCol = j;
-        }
-    }
-
-    // Encerra o pivotamento total caso este seja o maior valor possivel
-    if(maxPivotLine == index && maxPivotCol == index) return matrix.at(index, index);
-
-    // Caso o maior valor das colunas seja maior que o maior valor das linhas analisadas,
-    // troca as colunas, senão, troca as linhas
-    if(abs(matrix.at(index, maxPivotCol)) > abs(matrix.at(maxPivotLine, index))){
+    // Troca as colunas necessárias e as linhas necessárias para deixar o maior valor no lugar do valora atual
+    if(maxPivotCol != index){
         // Realiza a troca de colunas por iteração
         for(int i = 0; i < matrix.size; ++i){
             float helper = matrix.at(i, index);
@@ -140,9 +144,13 @@ float pivoting(LinearSystem &matrix, int index){
             matrix.at(i, maxPivotCol) = helper;
         }
 
-        matrix.columnPivot[index] = maxPivotCol;
+        // Troca os elementos referentes às trocas
+        float helper = matrix.columnPivot[index];
+        matrix.columnPivot[index] = matrix.columnPivot[maxPivotCol];
+        matrix.columnPivot[maxPivotCol] = helper;
     }
-    else{
+
+    if(maxPivotLine != index){
         //Realiza a troca das linhas na memória
         float* helper = (float*)(malloc(sizeof(float) * matrix.size));
 
@@ -152,18 +160,21 @@ float pivoting(LinearSystem &matrix, int index){
 
         free(helper);
 
-        matrix.linePivot[index] = maxPivotLine;
+        // Troca os elementos referentes às trocas
+        float lineHelper = matrix.linePivot[index];
+        matrix.linePivot[index] = matrix.linePivot[maxPivotLine];
+        matrix.linePivot[maxPivotLine] = lineHelper;
     }
 
-    // Realiza o pivotamento novamente até que o maior valor total seja encontrado
-    return pivoting(matrix, index);
+    return matrix.at(index, index);
 }
 
+// Função da etapa de eliminação de Gauss da matriz principal
 void elimination(LinearSystem &matrix){
     int size = matrix.size;
 
     // Itera em todas as linhas para zerar todos os elementos da coluna do pivot abaixo da linha atual
-    for(int i = 0; i < size-1; ++i){
+    for(int i = 0; i < size; ++i){
         float pivot = pivoting(matrix, i);
 
         if (pivot == 0) { // Sistema singular ou com múltiplas soluções
@@ -173,7 +184,7 @@ void elimination(LinearSystem &matrix){
 
         // Itera em todas as linhas abaixo da atual
         for (int j = i + 1; j < size; ++j){
-            float mult = -matrix.at(j, i) / pivot;
+            float mult = matrix.at(j, i) / pivot;
 
             simd_vec mult_vec(mult);
 
@@ -185,25 +196,25 @@ void elimination(LinearSystem &matrix){
                 float* row_j_ptr = &matrix.at(j, k);
 
                 simd_vec rowVec_i;
-                rowVec_i.copy_from(row_i_ptr, stdx::element_aligned);
-
                 simd_vec rowVec_j;
+
+                rowVec_i.copy_from(row_i_ptr, stdx::element_aligned);
                 rowVec_j.copy_from(row_j_ptr, stdx::element_aligned);
 
-                rowVec_j += rowVec_i * mult_vec;
+                rowVec_j -= rowVec_i * mult_vec;
 
                 rowVec_j.copy_to(row_j_ptr, stdx::element_aligned);
             }
 
             for(; k < size; ++k){
-                matrix.at(j, k) += matrix.at(i, k) * mult;
+                matrix.at(j, k) -= matrix.at(i, k) * mult;
             }
         }
     }
 
     // Checa se a matriz é mal condicionada ou impossível
     // Primeiro normalizamos a matriz
-    vector<float> normalizedData = vector<float>(&matrix.at(0,0), &matrix.at(size-1, matrix.size));
+    vector<float> normalizedData = *(matrix.data);
 
     LinearSystem normalizedLinearSystem(&normalizedData);
     normalizedLinearSystem.normalize();
@@ -222,21 +233,21 @@ void elimination(LinearSystem &matrix){
 
 }
 
+// Função da etapa de substituição, que pode ser reutilizada de um mesmo objeto LinearSystem para diversos vetores de termos independentes
 vector<float> substitution(LinearSystem &matrix, vector<float> &coeff){
     int size = matrix.size;
     vector<float> result(size);
 
+    vector<float> realCoeff(size);
     // Arruma os coeficientes de acordo com os pivotamentos de linhas e multiplicadores
     for(int i = 0; i < size; ++i){
-        if(matrix.linePivot[i] != -1){
-            float helper = coeff[i];
-            coeff[i] = coeff[matrix.linePivot[i]];
-            result[matrix.linePivot[i]] = helper;
-        }
+        realCoeff[i] = coeff[matrix.linePivot[i]];
+    }
 
+    for(int i = 0; i < size; ++i){
         // Itera nas linhas abaixo de i, aplicando os multiplicadores guardados
         for(int j = i+1; j < size; ++j){
-            coeff[j] += matrix.at(j, i) * coeff[i];
+            realCoeff[j] -= matrix.at(j, i) * realCoeff[i];
         }
     }
 
@@ -250,38 +261,49 @@ vector<float> substitution(LinearSystem &matrix, vector<float> &coeff){
             sum += result[j] * matrix.at(i, j);
         }
 
+        float diagonal = matrix.at(i, i);
+
+        if(diagonal == 0){
+            cout << "Encontrada diagonal com valor zero" << endl;
+            result[i] = 0.0f;
+            continue;
+        }
+
         //Calcula o resultado final daquela linha, sendo ele o termo independente menos a soma divididos pelo coeficiente da diagonal
-        result[i] = (coeff[i] - sum) / matrix.at(i, i);
+        result[i] = (realCoeff[i] - sum) / diagonal;
     }
 
+    vector<float> realResult(size);
     // Troca as linhas do resultado de acordo com os pivotamentos de colunas
     for(int i = 0; i < size; ++i){
-        if(matrix.columnPivot[i] != -1){
-            float helper = result[i];
-            result[i] = result[matrix.columnPivot[i]];
-            result[matrix.columnPivot[i]] = helper;
-        }
+        realResult[matrix.columnPivot[i]] = result[i];
     }
 
-    return result;
+    return realResult;
 }
 
 int main(){
     float input = 0;
-    vector<float> matrixVector = {
-        2, 1, 0, 1, 0, 0,
-        1, 2, 1, 0, 1, 0,
-        0, 1, 2, 0, 0, 1,
-        1, 0, 0, 2, 1, 1,
-        0, 1, 0, 1, 2, 1,
-        1, 1, 1, 0, 1, 2
-    };
+    vector<float> matrixVector;
+    // vector<float> matrixVector = {
+    //     2, 1, 0, 1, 0, 0,
+    //     1, 2, 1, 0, 1, 0,
+    //     0, 1, 2, 0, 0, 1,
+    //     1, 0, 0, 2, 1, 1,
+    //     0, 1, 0, 1, 2, 1,
+    //     1, 1, 1, 0, 1, 2
+    // };
+
     // Input do usuario da matriz principal
-    // cout << "Insira os valores da sua matriz quadrada (não inclua termos independentes): " << endl;
-    // cout << "Digite 'p' para parar." << endl;
-    // while ((cin >> input) && input != 'p'){
-    //     matrixVector.push_back(input);
-    // }
+    int matCount;
+    cout << "Insira qual a largura da sua matriz quadrada principal: ";
+    cin >> matCount;
+
+    cout << "Insira os valores da sua matriz quadrada (não inclua termos independentes): " << endl;
+    for(int i = 0; i < matCount*matCount; i++){
+        cin >> input;
+        matrixVector.push_back(input);
+    }
 
     LinearSystem myLinearSystem = LinearSystem(&matrixVector);
 
@@ -290,17 +312,18 @@ int main(){
 
     elimination(myLinearSystem);
 
-    cout << "Matriz Triangular Superior:" << endl;
+    cout << "Matriz Triangular Superior com multiplicadores:" << endl;
     myLinearSystem.printLinearSystem();
 
-    input = 0;
-    vector<float> coefficient = { 8, 13, 14, 20, 22, 23 };
+    vector<float> coefficient;
+    //vector<float> coefficient = { 8, 13, 14, 20, 22, 23 };
+
     // Input do usuario do vetor de termos independentes
-    // cout << "Insira os valores do seu vetor de termos independentes: " << endl;
-    // cout << "Digite 'p' para parar." << endl;
-    // while ((cin >> input) && input != 'p'){
-    //     coefficient.push_back(input);
-    // }
+    cout << "Insira os valores do seu vetor de termos independentes: " << endl;
+    for(int i = 0; i < myLinearSystem.size; i++){
+        cin >> input;
+        coefficient.push_back(input);
+    }
 
     vector<float> result = substitution(myLinearSystem, coefficient);
 
