@@ -79,8 +79,7 @@ public:
         for(int j = 0; j < size; j++){
             simd_vec sqr_sum_vec(0.0f);
 
-            // Soma do quadrado dos valores do vetor
-            int i = 0; // Uso de vetorização SIMD para acelerar o processo para matrizes de largura maior que 4
+            int i = 0;
             for(; i + batch_size <= size; i += batch_size){
                 float* row_j_ptr = &this->at(j, i);
                 simd_vec rowVec;
@@ -91,7 +90,6 @@ public:
 
             float sqr_sum = stdx::reduce(sqr_sum_vec);
 
-            // Processamento dos elementos restantes que não couberam no batch do SIMD
             for(; i < size; i++){
                 sqr_sum += this->at(j, i) * this->at(j, i);
             }
@@ -104,9 +102,9 @@ public:
                 continue;
             }
 
-            float invSqr = Q_rsqrt(sqr_sum); // Cálculo do inverso da raiz para a normalização
+            float invSqr = Q_rsqrt(sqr_sum);
 
-            i = 0; // Vetorização SIMD para a multiplicação de cada elemento pela normalização
+            i = 0;
             for(; i + batch_size <= size; i += batch_size){
                 float* row_j_ptr = &this->at(j, i);
                 simd_vec rowVec;
@@ -117,7 +115,6 @@ public:
                 rowVec.copy_to(row_j_ptr, stdx::element_aligned);
             }
 
-            // Fazer a mesma coisa acima pros elementos que não couberam no SIMD
             for(; i < size; i++){
                 this->at(j, i) *= invSqr;
             }
@@ -217,7 +214,6 @@ void elimination(LinearSystem &matrix){
                 rowVec_j.copy_to(row_j_ptr, stdx::element_aligned);
             }
 
-            // Faz a mesma coisa que acima mas para os elementos que não couberam no SIMD
             for(; k < size; ++k){
                 matrix.at(j, k) -= matrix.at(i, k) * mult;
             }
@@ -294,6 +290,22 @@ vector<float> substitution(LinearSystem &matrix, vector<float> &coeff){
     return realResult;
 }
 
+// Função para calcular a matriz principal do problema do círculo e o vetor de termos independentes
+vector<float> CircleMatrix(float thisPoints[3][2], vector<float> &linearTerms){
+
+    vector<float> outMatrix;
+
+    for(int i = 0; i < 3; i++){
+        outMatrix.push_back(2 * thisPoints[i][0]); // 2 * x_i
+        outMatrix.push_back(2 * thisPoints[i][1]); // 2 * y_i
+        outMatrix.push_back(-1);
+
+        linearTerms.push_back(thisPoints[i][0] * thisPoints[i][0] + thisPoints[i][1] * thisPoints[i][1]); // x_i ^ 2 + y_i ^ 2
+    }
+
+    return outMatrix;
+}
+
 int main(){
 
     systemState = WELL_CONDITIONED;
@@ -303,58 +315,43 @@ int main(){
         "Your system is well conditioned."
     };
 
-    float input = 0;
-    vector<float> matrixVector;
-    // vector<float> matrixVector = {
-    //     2, 1, 0, 1, 0, 0,
-    //     1, 2, 1, 0, 1, 0,
-    //     0, 1, 2, 0, 0, 1,
-    //     1, 0, 0, 2, 1, 1,
-    //     0, 1, 0, 1, 2, 1,
-    //     1, 1, 1, 0, 1, 2
-    // };
+    // Input dos valores dos pontos
+    float input_x, input_y;
+    float points[3][2];
+    
+    cout << "Insira os valores dos pontos: " << endl;
+    for(int i = 0; i < 3; i++){
+        cout << "Ponto " << i + 1 << ": " << endl;
+        cout << "x_" << i + 1 << ": ";
+        cin >> input_x;
+        points[i][0] = input_x;
 
-    // Input do usuario da matriz principal
-    int matCount;
-    cout << "Insira qual a largura da sua matriz quadrada principal: ";
-    cin >> matCount;
-
-    cout << "Insira os valores da sua matriz quadrada (não inclua termos independentes): " << endl;
-    for(int i = 0; i < matCount*matCount; i++){
-        cin >> input;
-        matrixVector.push_back(input);
+        cout << "y_" << i + 1 << ": ";
+        cin >> input_y;
+        points[i][1] = input_y;
     }
 
-    LinearSystem myLinearSystem = LinearSystem(&matrixVector);
+    vector<float> linCoeff;
+    vector<float> matrixVector = CircleMatrix(points, linCoeff);
 
-    cout << "Matriz Original:" << endl;
-    myLinearSystem.printLinearSystem();
+    // Resolução do sistema linear
+    LinearSystem myLinearSystem = LinearSystem(&matrixVector);
 
     elimination(myLinearSystem);
 
-    cout << "Matriz Triangular Superior com multiplicadores:" << endl;
-    myLinearSystem.printLinearSystem();
-
-    vector<float> coefficient;
-    //vector<float> coefficient = { 8, 13, 14, 20, 22, 23 };
-
-    // Input do usuario do vetor de termos independentes
-    cout << "Insira os valores do seu vetor de termos independentes: " << endl;
-    for(int i = 0; i < myLinearSystem.size; i++){
-        cin >> input;
-        coefficient.push_back(input);
-    }
-
-    vector<float> result = substitution(myLinearSystem, coefficient);
+    vector<float> result = substitution(myLinearSystem, linCoeff);
+    float a = result[0];
+    float b = result[1];
+    float r = sqrt(a*a + b*b - result[2]);
 
     cout << "--------------------" << endl;
     cout << stateMessages[systemState] << endl;
     cout << "--------------------" << endl;
 
-    cout << "Solucao:" << endl;
-    for (size_t i = 0; i < result.size(); ++i) {
-        cout << "x" << i << " = " << result[i] << endl;
-    }
+    cout << "Solução:" << endl;
+    cout << "a = " << a << endl;
+    cout << "b = " << b << endl;
+    cout << "r = " << r << endl;
 
     return 0;
 }

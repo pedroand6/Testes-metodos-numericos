@@ -11,6 +11,8 @@
         "simd": "cpp",
         "bitset": "cpp",
         "random": "cpp",
-        "string": "cpp"
+        "string": "cpp",
+        "deque": "cpp",
+        "functional": "cpp"
     }
 }
