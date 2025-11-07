@@ -52,11 +52,11 @@ public:
         // Caso o valor de entrada seja maior que o valor do maior elemento 
         // ou menor que o valor do menor elemento da tabela, retornamos os 
         // índices do intervalo nos extremos dos pontos correspondentes
-        if(value > x_data[higherIdx]){
+        if(value > this->x_data[higherIdx]){
             cout << "Tentativa de extrapolação pela direita encontrada." << endl;
             return Tuple(higherIdx - 1, higherIdx);
         }
-        else if(value < x_data[lowerIdx]){
+        else if(value < this->x_data[lowerIdx]){
             cout << "Tentativa de extrapolação pela esquerda encontrada." << endl;
             return Tuple(lowerIdx, lowerIdx + 1);
         }
@@ -87,13 +87,13 @@ public:
         os vizinhos pegos no valor de entrada.
         */
 
-        vector<int> neighbors = {}; // array de saída
-        int leftIdx = interval.x; // índice do elemento à esquerda do intervalo atual considerado
-        int rightIdx = interval.y; // índice do elemento à direita do intervalo atual considerado
+        vector<int> neighbors = { interval.x, interval.y }; // array de saída (começa com o intervalo mínimo, evitando extrapolação)
+        int leftIdx = interval.x - 1; // índice do elemento à esquerda do intervalo atual considerado
+        int rightIdx = interval.y + 1; // índice do elemento à direita do intervalo atual considerado
 
-        for(int i = 0; i < quantity; ++i){
+        for(int i = 0; i < quantity - 2; ++i){
             // Verifica se o índice à esquerda está dentro dos limites da tabela e checa se
-            // o valor mais à esquerda do intervalo atual é mais próximo do nosso valor de entrad
+            // o valor mais à esquerda do intervalo atual é mais próximo do nosso valor de entrada
             // que o valor mais à direita
             if(leftIdx >= 0 && abs(value - this->x_data[leftIdx]) < abs(value - this->x_data[rightIdx])){
                 neighbors.insert(neighbors.begin(), leftIdx); // Insere o índice do valor à esquerda nos vizinhos
@@ -163,7 +163,7 @@ int main(){
 
     DataTable table = DataTable(x_data, y_data, x_data.size());
 
-    cout << Interpolate(table, 3.2f, 3) << endl;
+    cout << "Valor interpolado para a tabela fornecida, para x = 3.2 e ordem 3: f(x) = " << Interpolate(table, 3.2f, 3) << endl;
 
     return 0;
 }
