@@ -2,81 +2,82 @@
 #include <iostream>
 #include <math.h>
 #include <vector>
+#include <fstream>
 
 using namespace std;
 
-struct Tuple{
-    /*
-    Esta estrutura serve como uma tupla (int, int) para 
-    retorno fácil de índices de pontos de uma tabela ou intervalo
-    */
-public:
-    int x;
-    int y;
-
-    Tuple(int x, int y){
-        this->x = x;
-        this->y = y;
-    }
-};
-
-struct TridiagonalMat {
-    vector<double> upperDiag;
-    vector<double> middleDiag;
-    vector<double> lowerDiag;
-
-    TridiagonalMat() {}
-
-    TridiagonalMat(int size){
-        upperDiag = vector<double>(size-1, 0);
-        middleDiag = vector<double>(size, 0);
-        lowerDiag = vector<double>(size-1, 0);
-    }
-};
-
 class SplineSystem {
+    /* 
+    Classe para guardar as informações de uma spline, como
+    elementos do sistema linear, dados de input e resultados das
+    derivadas segundas do sistema e usar elas para a avaliação
+    do valor de um ponto da função ajustada pela spline
+     */
 private:
-    vector<double> x_data;
-    vector<double> y_data;
+    vector<double> x; // Dados de entrada de x
+    vector<double> y; // Dados de entrada de f(x)
+    vector<double> h; // x[i] - x[i-1], valores auxiliares
+    vector<double> e; // 6 * (y[i] - y[i-1]) / h[i], valores auxiliares
+    vector<double> phi; // Derivadas segundas para cada ponto x[i] de f(x)
 
-    vector<double> h_data;
-    vector<double> e_data;
-    vector<double> phi;
+    int size; // Quantidade de pontos usados
+    int numDer; // Quantidade de derivadas segundas desconhecidas (size - 2)
 
-    int size;
-    TridiagonalMat LU_Matrix;
+    void build(){
+        /* Constrói a spline, iniciando os valores de auxílio do sistema 
+        ('h' e 'e') e calculando as derivadas segundas desconhecidas */
 
-
-    void DecomposeSystem(TridiagonalMat &matrix){
-        int n = this->size - 1;
-        matrix.middleDiag[0] = 2 * (this->h_data[0] + this->h_data[1]);
-        
-        for(int i = 0; i < n - 2; ++i){
-            matrix.lowerDiag[i] = this->h_data[i+1] / matrix.middleDiag[i];
-            matrix.middleDiag[i+1] = 2*(this->h_data[i+1] + this->h_data[i+2]) - (this->h_data[i+1] * this->h_data[i+1]) / matrix.middleDiag[i];
-            //matrix.upperDiag[i - 1] = this->h_data[i]; // desnecessario para os calculos
+        // Vetores de auxílio do sistema, com tamanho igual a quantidade de pontos menos um
+        h.assign(size - 1, 0.0);
+        e.assign(size - 1, 0.0);
+        for(int i = 0; i < size-1; ++i){
+            h[i] = (x[i+1] - x[i]);
+            e[i] = 6.0 * (y[i+1] - y[i]) / h[i];
         }
+
+        // Número de derivadas segundas desconhecidas
+        numDer = size - 2;
+
+        // Vetor de derivadas segundas (já conhecemos a primeira e a última do vetor, iguais a zero)
+        phi.assign(size, 0.0);
+        SolveSpline();
     }
 
     void SolveSpline(){
-        int n = this->size - 1;
+        /* Resolve o sistema linear da Spline por decomposição LU,
+        calculando os valores das derivadas segundas desconhecidas */
 
-        vector<double> z = vector<double>(n - 1, 0);
-        z[0] = this->e_data[1] - this->e_data[0];
+        // Arrays da decomposição LU ('h' + 'u' para matriz U e 'l' para matriz L), array 'z' solução de L
+        // Aqui temos U composto pela diagonal principal 'u' e acima por 'h' e L composto pela diagonal abaixo por 'l'
+        vector<double> u(numDer), l(numDer-1), z(numDer);
 
-        for(int i = 1; i < n - 1; ++i){
-            z[i] = (this->e_data[i+1] - this->e_data[i]) - this->LU_Matrix.lowerDiag[i-1] * z[i-1];
+        // Cálculo da decomposição LU para os vetores 'l' e 'u' a partir dos valores de 'h'
+        u[0] = 2*(h[0] + h[1]);
+        int j; // Contador auxiliar para evitar confusão de índices (j = i+1)
+        for(int i = 0; i < numDer-1; ++i){
+            j = i+1;
+
+            l[i] = h[j] / u[i];
+            u[j] = 2*(h[j] + h[j+1]) - h[j]*l[i];
         }
 
-        this->phi[n - 1] = z[n - 2] / this->LU_Matrix.middleDiag[n - 2];
+        // Cálculo do vetor 'z' da solução do sistema do tipo L*z=b por substituição para frente
+        z[0] = e[1] - e[0];
+        for(int i = 1; i < numDer; ++i){
+            z[i] = e[i+1] - e[i] - l[i - 1] * z[i - 1];
+        }
 
-        for(int i = n - 2; i >= 1; --i){
-            this->phi[i] = (z[i] - this->h_data[i+1] * this->phi[i+1]) / this->LU_Matrix.middleDiag[i];
+        // Cálculo do vetor 'phi' de derivadas segundas (aqui calculamos só as desconhecidas e deixamos as
+        // conhecidas com valor 0.0 padrão), por substituição para trás, do sistema de tipo U*phi=z
+        int n = numDer - 1; // Último elemento dos resultados do sistema
+        phi[n+1] = z[n] / u[n];
+        for(int i = n - 1; i >= 0; --i){
+            phi[i+1] = (z[i] - h[i+1] * phi[i+2]) / u[i]; // Preserva os valores de phi[0] e phi[size-1]
         }
 
     }
 
-    Tuple findInterval(double value){
+    int findInterval(double value){
         /* 
         double -> (int, int)
 
@@ -85,88 +86,85 @@ private:
         que contém este número em nossa tabela
         */
         
-        int lowerIdx = 0; // Índice do menor elemento do intervalo da busca
-        int higherIdx = this->size - 1; // Índice do maior elemento
-        int middleIdx = higherIdx / 2; // Índice do elemento do "meio"
-
-        // Caso o valor de entrada seja maior que o valor do maior elemento 
-        // ou menor que o valor do menor elemento da tabela, retornamos os 
-        // índices do intervalo nos extremos dos pontos correspondentes
-        if(value > this->x_data[higherIdx]){
-            cout << "Tentativa de extrapolação pela direita encontrada." << endl;
-            return Tuple(higherIdx - 1, higherIdx);
-        }
-        else if(value < this->x_data[lowerIdx]){
-            cout << "Tentativa de extrapolação pela esquerda encontrada." << endl;
-            return Tuple(lowerIdx, lowerIdx + 1);
-        }
+        int low = 0; // Índice do menor elemento do intervalo da busca
+        int high = size - 1; // Índice do maior elemento
 
         // Realiza a bissecção dos índices até que o intervalo da bissecção tenha tamanho 1
-        while(higherIdx - lowerIdx > 1){
+        while(high - low > 1){
+            int middle = (low + high) / 2; // Cálculo do valor do índice do meio (bissecção) do intervalo
             
-            if(this->x_data[middleIdx] > value){
-                higherIdx = middleIdx;
-            }
-            else{
-                lowerIdx = middleIdx;
-            }
-
-            // Cálculo do valor do índice do meio (bissecção) do intervalo
-            middleIdx = (higherIdx + lowerIdx) / 2;
+            if(x[middle] > value) high = middle;
+            else low = middle;
         }
 
-        return Tuple(lowerIdx, higherIdx); // Retorna os índices do intervalo encontrado
+        return high; // Retorna o maior índice do intervalo encontrado
     }
 
-    double polynomial(int idx, double x){
+    double cubicSplineInterp(int cur, double value){
+        /* Fórmula padrão de interpolação por spline cúbica, usando
+        os valores já conhecidos dos vetores de auxílio 'h', os pontos
+        fornecidos de 'x' e 'y' e o vetor de derivadas segundas nestes pontos,
+        para calcular um valor f(x) dado um x qualquer no intervalo da spline (value)
+        e o índice do ponto da spline de maior deste intervalo (cur) */
 
-        return (this->phi[idx - 1] * pow(x_data[idx] - x, 3) + this->phi[idx] * pow(x - this->x_data[idx-1], 3)) / (6 * this->h_data[idx])
-                + ( this->y_data[idx-1] / this->h_data[idx] - this->h_data[idx] * this->phi[idx-1] / 6 ) * (this->x_data[idx] - x) 
-                + ( this->y_data[idx] / this->h_data[idx] - this->h_data[idx] * this->phi[idx] / 6 ) * (x - this->x_data[idx-1]);
+        int prev = cur - 1; // índice anterior ao atual (cur)
+        double deltaXi = x[cur] - value;
+        double deltaX = value - x[prev];
 
+        double S = (phi[prev] * pow(deltaXi, 3) + phi[cur] * pow(deltaX, 3)) / (6*h[prev])
+                + ( y[prev] / h[prev] - h[prev] * phi[prev] / 6 ) * deltaXi
+                + ( y[cur] / h[prev] - h[prev] * phi[cur] / 6 ) * (deltaX);
+
+        return S;
     }
 
 public:
-    SplineSystem(vector<double> x_data, vector<double> y_data){
-        this->x_data = x_data;
-        this->y_data = y_data;
-        this->size = x_data.size();
-
-        for(int i = 1; i < this->size; ++i){
-            double h = x_data[i] - x_data[i-1];
-            this->h_data.push_back(h);
-            this->e_data.push_back(6 * (this->y_data[i] - this->y_data[i-1]) / h);
-        }
-
-        this->LU_Matrix = TridiagonalMat(this->size - 2);
-        this->DecomposeSystem(this->LU_Matrix);
-
-        this->phi = vector<double>(this->size, 0);
-        this->SolveSpline();
+    SplineSystem(const vector<double>& x_data, const vector<double>& y_data){
+        // Construtor da classe copia os dados de input para o objeto e já constrói
+        // a spline, deixando o usuário livre pra avaliar qualquer ponto dela depois
+        x = vector<double>(x_data);
+        y = vector<double>(y_data);
+        size = x.size();
+        build();
     }
 
-    double Evaluate(double value){
-        Tuple interval = findInterval(value);
-        return polynomial(interval.y, value);
-    }
+    double evaluate(double value){
+        /* Avalia f(x) para um dado valor 'x' para esta spline */
 
+        int idx = findInterval(value); // índice do maior 'x' do intervalo em que este valor se encontra
+
+        // Lida com os valores nos extremos da spline de forma explícita, evitando erros
+        if (value == x[idx-1]) return y[idx-1];
+        if (value == x[idx]) return y[idx];
+
+        return cubicSplineInterp(idx, value); // Retorna o valor calculado pela interpolação de spline cúbica padrão
+    }
 };
 
 
 int main(){
     // Valores de entrada da tabela
-    vector<double> x_data = {};
-    vector<double> y_data = {};
+    vector<double> x_data, y_data;
 
     for(int i = 0; i < 21; ++i){
-        double x = -1 + i * 0.1f;
+        double x = -1 + i * 0.1;
         x_data.push_back(x);
-        y_data.push_back(1/(1 + 25*x*x));
+        y_data.push_back(1/(1 + 25*x*x)); // Valores da função real
     }
 
     SplineSystem spline = SplineSystem(x_data, y_data);
 
-    cout << spline.Evaluate(0.5) << endl; // Valor esperado: 0.137931
+    // Tabela com os dados de execução do código, no total com 100 pontos entre -1 e 1
+    // calculando os valores da função real e avaliados pela spline
+    ofstream tableFile("q3.txt");
+    tableFile << "x,f(x),spline" << endl;
+    for (int i = 0; i < 101; ++i){
+        double xi = -1 + i * 0.02;
+        double fx = 1/(1 + 25*xi*xi);
+        double sx = spline.evaluate(xi);
+        tableFile << xi << "," << fx << "," << sx << endl;
+    }
+    tableFile.close();
 
     return 0;
 }

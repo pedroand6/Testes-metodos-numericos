@@ -30,10 +30,10 @@ public:
     vector<double> y_data;
     int size; // Quantidade de elementos nos dados
 
-    DataTable(vector<double> x_data, vector<double> y_data, int size){
-        this->x_data = x_data;
-        this->y_data = y_data;
-        this->size = size;
+    DataTable(const vector<double>& x, const vector<double>& y){
+        this->x_data = vector<double>(x);
+        this->y_data = vector<double>(y);
+        size = x.size();
     }
 
     Tuple findInterval(double value){
@@ -45,37 +45,30 @@ public:
         que contém este número em nossa tabela
         */
         
-        int lowerIdx = 0; // Índice do menor elemento do intervalo da busca
-        int higherIdx = this->size - 1; // Índice do maior elemento
-        int middleIdx = higherIdx / 2; // Índice do elemento do "meio"
+        int low = 0; // Índice do menor elemento do intervalo da busca
+        int high = size - 1; // Índice do maior elemento
 
         // Caso o valor de entrada seja maior que o valor do maior elemento 
         // ou menor que o valor do menor elemento da tabela, retornamos os 
         // índices do intervalo nos extremos dos pontos correspondentes
-        if(value > this->x_data[higherIdx]){
+        if(value > x_data[high]){
             cout << "Tentativa de extrapolação pela direita encontrada." << endl;
-            return Tuple(higherIdx - 1, higherIdx);
+            return Tuple(high - 1, high);
         }
-        else if(value < this->x_data[lowerIdx]){
+        else if(value < x_data[low]){
             cout << "Tentativa de extrapolação pela esquerda encontrada." << endl;
-            return Tuple(lowerIdx, lowerIdx + 1);
+            return Tuple(low, low + 1);
         }
 
         // Realiza a bissecção dos índices até que o intervalo da bissecção tenha tamanho 1
-        while(higherIdx - lowerIdx > 1){
+        while(high - low > 1){
+            int middle = (low + high) / 2; // Cálculo do valor do índice do meio (bissecção) do intervalo
             
-            if(this->x_data[middleIdx] > value){
-                higherIdx = middleIdx;
-            }
-            else{
-                lowerIdx = middleIdx;
-            }
-
-            // Cálculo do valor do índice do meio (bissecção) do intervalo
-            middleIdx = (higherIdx + lowerIdx) / 2;
+            if(x_data[middle] > value) high = middle;
+            else low = middle;
         }
 
-        return Tuple(lowerIdx, higherIdx); // Retorna os índices do intervalo encontrado
+        return Tuple(low, high); // Retorna os índices do intervalo encontrado
     }
 
     vector<int> getNeighbors(double value, Tuple interval, int quantity){
@@ -92,21 +85,29 @@ public:
         int rightIdx = interval.y + 1; // índice do elemento à direita do intervalo atual considerado
 
         for(int i = 0; i < quantity - 2; ++i){
-            // Verifica se o índice à esquerda está dentro dos limites da tabela e checa se
-            // o valor mais à esquerda do intervalo atual é mais próximo do nosso valor de entrada
-            // que o valor mais à direita
-            if(leftIdx >= 0 && abs(value - this->x_data[leftIdx]) < abs(value - this->x_data[rightIdx])){
-                neighbors.insert(neighbors.begin(), leftIdx); // Insere o índice do valor à esquerda nos vizinhos
-                leftIdx--; // Aumenta o intervalo considerado em 1 para a esquerda
+            // Verifica se os índices à esquerda e direita estão dentro dos limites da tabela e 
+            bool canGoLeft = (leftIdx >= 0);
+            bool canGoRight = (rightIdx < size);
+            if(!canGoLeft && !canGoRight) break; // caso os dois saiam dos limites, não há para onde ir mais
 
-                continue; // Segue para o próximo elemento, ignorando a parte seguinte reservada para o elemento à direita
-            }
+            if(canGoLeft && canGoRight){
+                // checa se o valor mais à esquerda do intervalo atual é mais próximo do nosso valor de entrada
+                // que o valor mais à direita
+                if(abs(value - x_data[leftIdx]) < abs(value - x_data[rightIdx])){
+                    // Insere o índice do valor à esquerda nos vizinhos
+                    neighbors.insert(neighbors.begin(), leftIdx--); // Aumenta o intervalo considerado em 1 para a esquerda
+                }
+                else{
+                    // Caso a condição acima não seja satisfeita faz o mesmo que a condição acima só que para a direita do intervalo
+                    neighbors.push_back(rightIdx++);
+                }
 
-            // Caso a condição acima não seja satisfeita E o índice à direita do intervalo esteja
-            // dentro dos limites da tabela, faz o mesmo que a condição acima só que para a direita do intervalo
-            if(rightIdx < this->size){
-                neighbors.push_back(rightIdx);
-                rightIdx++;
+            } else if(canGoLeft){
+                // Só consegue ir para a esquerda então aumenta o intervalo até onde der
+                neighbors.insert(neighbors.begin(), leftIdx--);
+            } else if(canGoRight){
+                // Só consegue ir para a direita então aumenta o intervalo até onde der
+                neighbors.push_back(rightIdx++);
             }
 
         }
@@ -161,7 +162,7 @@ int main(){
     vector<double> x_data = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f};
     vector<double> y_data = {-3.0f, -0.5f, -1.0f, 0.0f, 0.5f, 1.0f};
 
-    DataTable table = DataTable(x_data, y_data, x_data.size());
+    DataTable table = DataTable(x_data, y_data);
 
     cout << "Valor interpolado para a tabela fornecida, para x = 3.2 e ordem 3: f(x) = " << Interpolate(table, 3.2f, 3) << endl;
 

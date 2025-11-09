@@ -27,30 +27,22 @@ public:
         mais próximo à esse número em nossa tabela 
         (arredondando o valor para baixo)  */
         
-        int lowerIdx = 0; // Índice do menor elemento do intervalo da busca
-        int higherIdx = this->size - 1; // Índice do maior elemento
-        int middleIdx = higherIdx / 2; // Índice do elemento do "meio"
+        int low = 0; // Índice do menor elemento do intervalo da busca
+        int high = size - 1; // Índice do maior elemento
 
         // Caso o valor de entrada seja maior ou igual que o valor do maior elemento 
         // da tabela, retornamos o índice deste elemento
-        if(value >= data[higherIdx]) return higherIdx;
+        if(value >= data[high]) return high;
 
-        // Realiza a bissecção dos índices até que o índice calculado para a
-        // metade seja igual a um dos extremos do intervalo da busca
-        while(lowerIdx != middleIdx && higherIdx != middleIdx){
+        // Realiza a bissecção dos índices até que o intervalo da bissecção tenha tamanho 1
+        while(high - low > 1){
+            int middle = (low + high) / 2; // Cálculo do valor do índice do meio (bissecção) do intervalo
             
-            if(this->data[middleIdx] > value){
-                higherIdx = middleIdx;
-            }
-            else{
-                lowerIdx = middleIdx;
-            }
-
-            // Cálculo do valor do índice do meio (bissecção) do intervalo
-            middleIdx = (higherIdx + lowerIdx) / 2;
+            if(data[middle] > value) high = middle;
+            else low = middle;
         }
 
-        return middleIdx; // Retorna o índice encontrado
+        return low; // Retorna o menor índice encontrado
     }
 
 };
